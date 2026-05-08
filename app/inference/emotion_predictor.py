@@ -4,19 +4,17 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 class EmotionPredictor:
 
-    def __init__(self, model_path="models/emotion_classifier", threshold=0.30):
+    def __init__(self, model_path="models/emotion_classifier_v6", threshold=0.30):
 
         self.model_path = model_path
         self.threshold = threshold
 
-        # Load device (GPU if available)
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
 
         print("Emotion Predictor running on:", self.device)
 
-        # Load tokenizer and model
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
 
         self.model = AutoModelForSequenceClassification.from_pretrained(
@@ -26,13 +24,11 @@ class EmotionPredictor:
         self.model.to(self.device)
         self.model.eval()
 
-        # Load label mapping from model config
         self.id2label = self.model.config.id2label
 
 
     def predict_emotions(self, text):
 
-        # Tokenize input
         inputs = self.tokenizer(
             text,
             return_tensors="pt",
@@ -41,37 +37,34 @@ class EmotionPredictor:
             max_length=128
         )
 
-        # Move tensors to GPU
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
         with torch.no_grad():
-
             outputs = self.model(**inputs)
 
         logits = outputs.logits
-
-        # Convert logits to probabilities
         probs = torch.sigmoid(logits)
 
-        probs = probs.squeeze().cpu().numpy()
+        probs = probs[0].cpu().numpy()
 
         predicted_emotions = []
 
-        # Apply threshold
+        # -----------------------------
+        # THRESHOLD FILTERING
+        # -----------------------------
         for i, prob in enumerate(probs):
 
             if prob >= self.threshold:
-
-                emotion = self.id2label[i]
-
                 predicted_emotions.append(
                     {
-                        "emotion": emotion,
+                        "emotion": self.id2label[i],
                         "confidence": float(prob)
                     }
                 )
 
-        # If no emotion passes threshold → choose highest
+        # -----------------------------
+        # FALLBACK (if empty)
+        # -----------------------------
         if len(predicted_emotions) == 0:
 
             max_index = probs.argmax()
@@ -83,24 +76,47 @@ class EmotionPredictor:
                 }
             )
 
+        # -----------------------------
+        # SORT + LIMIT
+        # -----------------------------
+        predicted_emotions = sorted(
+            predicted_emotions,
+            key=lambda x: x["confidence"],
+            reverse=True
+        )
+
+        predicted_emotions = predicted_emotions[:3]
+
         return predicted_emotions
 
 
+# -----------------------------
+# TESTING MAIN LOOP
+# -----------------------------
 if __name__ == "__main__":
 
     predictor = EmotionPredictor()
 
+    print("\n=== Emotion Predictor Test ===")
+    print("Type 'quit' to exit.\n")
+
     while True:
 
-        text = input("\nEnter a message (or 'quit'): ")
+        text = input("Input: ").strip()
 
         if text.lower() == "quit":
+            print("Exiting Emotion Predictor.\n")
             break
+
+        if not text:
+            continue
 
         emotions = predictor.predict_emotions(text)
 
-        print("\nDetected emotions:")
+        print("\nDetected Emotions:")
 
-        for e in emotions:
+        for i, e in enumerate(emotions):
+            label = "Primary" if i == 0 else "Secondary"
+            print(f"{label}: {e['emotion']} ({e['confidence']:.2f})")
 
-            print(f"{e['emotion']} ({e['confidence']:.2f})")
+        print()

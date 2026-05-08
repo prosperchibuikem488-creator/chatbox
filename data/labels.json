@@ -1,19 +1,17 @@
 {
-  "id2label": {
-    "0": "joy",
-    "1": "sadness",
+  "id2label": {  
+    "0": "joy",        
+    "1": "sadness", 
     "2": "anxiety",
-    "3": "anger",
-    "4": "stress",
-    "5": "neutral"
+    "3": "anger", 
+    "4": "neutral"
   },
 
   "label2id": {
     "joy": 0,
     "sadness": 1,
     "anxiety": 2,
-    "anger": 3,
-    "stress": 4,
-    "neutral": 5
+    "anger": 3, 
+    "neutral": 4
   }
 }
