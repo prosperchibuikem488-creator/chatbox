@@ -1,12 +1,16 @@
 import re
 import requests
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 
 class LlamaPredictor:
 
     def __init__(self, api_key, max_history=10):
 
-        self.api_key = api_key
+        self.api_key = os.getenv("MISTRAL_API_KEY")
         self.url = "https://api.mistral.ai/v1/chat/completions"
 
         # Conversation memory
@@ -141,21 +145,43 @@ Assistant:
         }
 
         try:
-            response = requests.post(self.url, headers=headers, json=payload)
+            response = requests.post(self.url, headers=headers, json=payload, timeout=15)
             result = response.json()
 
-            generated_text = result["choices"][0]["message"]["content"]
+            # Check for API-level errors (e.g. auth failure, bad request)
+            if "error" in result:
+                print(f"[Mistral API Error] {result['error']}")
+                generated_text = ""
+
+            # Guard against empty or missing choices
+            elif not result.get("choices"):
+                print(f"[Mistral API] Unexpected response format: {result}")
+                generated_text = ""
+
+            else:
+                generated_text = result["choices"][0]["message"]["content"]
+
+        except requests.exceptions.Timeout:
+            print("[Mistral API] Request timed out.")
+            generated_text = ""
 
         except Exception as e:
-            print("API Error:", e)
+            print(f"[Mistral API] Unexpected error: {e}")
             generated_text = ""
 
         response = self.clean_response(generated_text)
 
-        # Fallback
-        if len(response.split()) < 5:
-            response = (
-                 "I'm here and ready to chat. What would you like to talk about today?"
+        # Fallback — covers empty string (API error) AND too-short responses
+        if not generated_text.strip() or len(response.split()) < 5:
+            fallbacks = {
+                "joy": "That's wonderful to hear! I'm glad you're feeling good. Tell me more!",
+                "sadness": "I'm really sorry you're feeling this way. I'm here for you — want to talk about it?",
+                "anxiety": "It sounds like things feel overwhelming right now. Take a breath — I'm here with you.",
+                "anger": "It's okay to feel frustrated. I'm listening. What's been going on?",
+            }
+            response = fallbacks.get(
+                primary_emotion,
+                "I'm here and happy to chat. What's on your mind today?"
             )
 
         # Save memory

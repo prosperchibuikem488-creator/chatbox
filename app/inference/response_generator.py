@@ -102,7 +102,7 @@ class ResponseGenerator:
         # -----------------------------
         # 4. ADD COPING STRATEGY
         # -----------------------------
-        if primary_emotion in self.coping_strategies:
+        if primary_emotion in self.coping_strategies and self.coping_strategies[primary_emotion]:
 
             strategy = random.choice(
                 self.coping_strategies[primary_emotion]
