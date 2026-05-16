@@ -5,5 +5,4 @@ models.zip
 app/__pycache__/*
 app/inference/__pycache__/*
 training/__pycache__/*
-
 .env
