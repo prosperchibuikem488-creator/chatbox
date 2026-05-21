@@ -1,4 +1,4 @@
-from inference.response_generator import ResponseGenerator
+from app.inference.response_generator import ResponseGenerator
 
 
 def main():

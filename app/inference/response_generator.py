@@ -5,11 +5,11 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
-from inference.emotion_predictor import EmotionPredictor
-from inference.intent_predictor import IntentPredictor
-from inference.llama_predictor import LlamaPredictor
-from inference.safety_filter import SafetyFilter
-from inference.response_cleaner import ResponseCleaner
+from app.inference.emotion_predictor import EmotionPredictor
+from app.inference.intent_predictor import IntentPredictor
+from app.inference.llama_predictor import LlamaPredictor
+from app.inference.safety_filter import SafetyFilter
+from app.inference.response_cleaner import ResponseCleaner
 
 load_dotenv()
 
