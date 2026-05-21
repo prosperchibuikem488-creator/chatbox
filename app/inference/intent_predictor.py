@@ -65,7 +65,7 @@ if __name__ == "__main__":
         text = input("\nEnter a message (or 'quit'): ")
 
         if text.lower() == "quit":
-            break
+             break
 
         result = predictor.predict_intent(text)
 

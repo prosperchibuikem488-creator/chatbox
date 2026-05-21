@@ -49,11 +49,11 @@ class ResponseGenerator:
     # ==========================================================
 
     def _get_time_context(self):
-        hour = datetime.now().hour
-        if   5  <= hour < 12: return "morning"
-        elif 12 <= hour < 17: return "afternoon"
-        elif 17 <= hour < 21: return "evening"
-        else:                 return "night"
+         hour = datetime.now().hour
+         if   5  <= hour < 12: return "morning"
+         elif 12 <= hour < 17: return "afternoon"
+         elif 17 <= hour < 21: return "evening"
+         else:                 return "night"
 
     def _infer_length_preference(self, user_input):
         text = user_input.lower()

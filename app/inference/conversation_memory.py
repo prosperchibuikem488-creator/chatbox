@@ -1,7 +1,7 @@
 class ConversationMemory:
     def __init__(self, max_history=5):
-        self.history = []
-        self.max_history = max_history
+         self.history = []
+         self.max_history = max_history
 
     def add_turn(self, user, bot):
         self.history.append({"user": user, "bot": bot})
