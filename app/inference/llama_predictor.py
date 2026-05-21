@@ -181,10 +181,10 @@ class LlamaPredictor:
 
         if not generated_text.strip() or len(response.split()) < 5:
             fallbacks = {
-                 "joy":     "That's wonderful to hear! I'm glad you're feeling good. Tell me more!",
-                 "sadness": "I'm really sorry you're feeling this way. I'm here for you — want to talk about it?",
-                 "anxiety": "It sounds like things feel overwhelming right now. Take a breath — I'm here with you.",
-                 "anger":   "It's okay to feel frustrated. I'm listening. What's been going on?",
+                "joy":     "That's wonderful to hear! I'm glad you're feeling good. Tell me more!",
+                "sadness": "I'm really sorry you're feeling this way. I'm here for you — want to talk about it?",
+                "anxiety": "It sounds like things feel overwhelming right now. Take a breath — I'm here with you.",
+                "anger":   "It's okay to feel frustrated. I'm listening. What's been going on?",
             }
             response = fallbacks.get(
                 primary_emotion,

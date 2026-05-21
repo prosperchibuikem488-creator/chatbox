@@ -16,7 +16,7 @@ class ResponseCleaner:
         for s in sentences:
             s = s.strip()
             if s and s not in seen:
-                 cleaned.append(s)
-                 seen.add(s)
+                cleaned.append(s)
+                seen.add(s)
 
         return ". ".join(cleaned).strip()

@@ -71,8 +71,8 @@ class EmotionPredictor:
 
             predicted_emotions.append(
                 {
-                     "emotion": self.id2label[max_index],
-                     "confidence": float(probs[max_index])
+                    "emotion": self.id2label[max_index],
+                    "confidence": float(probs[max_index])
                 }
             )
 

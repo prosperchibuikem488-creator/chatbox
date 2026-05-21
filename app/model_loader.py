@@ -26,10 +26,10 @@ def download_models():
 
     try:
         snapshot_download(
-            repo_id    = repo_id,
-            local_dir  = "models",
-            token      = token,
-            repo_type  = "model",
+             repo_id    = repo_id,
+             local_dir  = "models",
+             token      = token,
+             repo_type  = "model",
         )
         logger.info("Models downloaded successfully.")
     except Exception as e:

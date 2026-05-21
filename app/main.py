@@ -67,10 +67,10 @@ class ChatRequest(BaseModel):
     session_id: str = "default"
  
 class ChatResponse(BaseModel):
-    response:           str
-    emotion:            str
-    secondary_emotions: list[str]
-    intent:             str
+     response:           str
+     emotion:            str
+     secondary_emotions: list[str]
+     intent:             str
  
 class ResetRequest(BaseModel):
     session_id: str = "default"
