@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
  
-from inference.response_generator import ResponseGenerator
+from app.inference.response_generator import ResponseGenerator
  
 load_dotenv()
  
