@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.inference.response_generator import ResponseGenerator
 from app.utility.download_model import download_model
 
-app = FastAPI()
+app = FastAPI() 
 bot = None
 
 class ChatRequest(BaseModel):
