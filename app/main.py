@@ -4,28 +4,30 @@ import time
 import logging
 from collections import defaultdict
 from datetime import datetime
-
+ 
+# Add app/ folder and project root to path
+sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
+ 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-
+ 
 from model_loader import download_models
-from app.inference.response_generator import ResponseGenerator
-
+from inference.response_generator import ResponseGenerator
+ 
 load_dotenv()
-
+ 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
-
+ 
 app = FastAPI(title="Solace Mental Health Chatbot API", version="1.0.0")
-
+ 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -33,17 +35,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+ 
 @app.on_event("startup")
 async def startup():
     logger.info("Downloading models if needed...")
     download_models()
     logger.info("Models ready.")
-
+ 
 RATE_LIMIT  = 20
 RATE_WINDOW = 60
 _req_log: dict = defaultdict(list)
-
+ 
 def check_rate_limit(ip: str):
     now = time.time()
     _req_log[ip] = [t for t in _req_log[ip] if now - t < RATE_WINDOW]
@@ -53,32 +55,32 @@ def check_rate_limit(ip: str):
             detail="Too many requests. Please slow down.",
         )
     _req_log[ip].append(now)
-
+ 
 _sessions: dict = {}
-
+ 
 def get_bot(session_id: str) -> ResponseGenerator:
     if session_id not in _sessions:
         logger.info(f"New session: {session_id}")
         _sessions[session_id] = ResponseGenerator()
     return _sessions[session_id]
-
+ 
 class ChatRequest(BaseModel):
     message:    str
     session_id: str = "default"
-
+ 
 class ChatResponse(BaseModel):
     response:           str
     emotion:            str
     secondary_emotions: list[str]
     intent:             str
-
+ 
 class ResetRequest(BaseModel):
     session_id: str = "default"
-
+ 
 @app.get("/")
 def health_check():
     return {"status": "ok", "message": "Solace chatbot API is running."}
-
+ 
 @app.get("/health")
 def detailed_health():
     return {
@@ -86,7 +88,7 @@ def detailed_health():
         "active_sessions": len(_sessions),
         "timestamp":       datetime.utcnow().isoformat(),
     }
-
+ 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, req: Request):
     check_rate_limit(req.client.host)
@@ -108,7 +110,7 @@ async def chat(request: ChatRequest, req: Request):
     except Exception as e:
         logger.error(f"[{request.session_id}] Error: {e}")
         raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
-
+ 
 @app.post("/reset")
 async def reset(request: ResetRequest, req: Request):
     check_rate_limit(req.client.host)
@@ -120,3 +122,4 @@ async def reset(request: ResetRequest, req: Request):
         logger.info(f"Session reset: {sid}")
         return {"status": "reset", "session_id": sid}
     return {"status": "no_session", "session_id": sid}
+ 
