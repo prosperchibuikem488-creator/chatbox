@@ -2,10 +2,11 @@ import os
 import sys
 import time
 import logging
+import asyncio
+import requests as http_requests
 from collections import defaultdict
 from datetime import datetime
  
-# Add app/ folder and project root to path
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
  
@@ -36,11 +37,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
  
+# ── Keep-alive ping (prevents Render free tier from sleeping) ──
+async def keep_alive():
+    url = os.getenv("RENDER_EXTERNAL_URL", "")
+    if not url:
+        logger.info("No RENDER_EXTERNAL_URL set — skipping keep-alive")
+        return
+    while True:
+        await asyncio.sleep(600)  # ping every 10 minutes
+        try:
+            http_requests.get(f"{url}/", timeout=10)
+            logger.info("Keep-alive ping sent.")
+        except Exception as e:
+            logger.warning(f"Keep-alive ping failed: {e}")
+ 
 @app.on_event("startup")
 async def startup():
     logger.info("Downloading models if needed...")
     download_models()
     logger.info("Models ready.")
+    asyncio.create_task(keep_alive())
  
 RATE_LIMIT  = 20
 RATE_WINDOW = 60
@@ -122,4 +138,3 @@ async def reset(request: ResetRequest, req: Request):
         logger.info(f"Session reset: {sid}")
         return {"status": "reset", "session_id": sid}
     return {"status": "no_session", "session_id": sid}
- 
