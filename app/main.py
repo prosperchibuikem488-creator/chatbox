@@ -6,29 +6,26 @@ import asyncio
 import requests as http_requests
 from collections import defaultdict
 from datetime import datetime
- 
+
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
- 
+
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
- 
-from model_loader import download_models
-from inference.response_generator import ResponseGenerator
- 
+
 load_dotenv()
- 
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
- 
+
 app = FastAPI(title="Solace Mental Health Chatbot API", version="1.0.0")
- 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -36,32 +33,44 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
- 
-# ── Keep-alive ping (prevents Render free tier from sleeping) ──
+
+# ── Keep-alive ping ────────────────────────────────────────
 async def keep_alive():
     url = os.getenv("RENDER_EXTERNAL_URL", "")
     if not url:
-        logger.info("No RENDER_EXTERNAL_URL set — skipping keep-alive")
         return
     while True:
-        await asyncio.sleep(600)  # ping every 10 minutes
+        await asyncio.sleep(600)
         try:
             http_requests.get(f"{url}/", timeout=10)
             logger.info("Keep-alive ping sent.")
         except Exception as e:
             logger.warning(f"Keep-alive ping failed: {e}")
- 
+
 @app.on_event("startup")
 async def startup():
-    logger.info("Downloading models if needed...")
-    download_models()
-    logger.info("Models ready.")
+    # Start keep-alive — do NOT download models here (causes timeout)
     asyncio.create_task(keep_alive())
- 
+    logger.info("Solace API is ready.")
+
+# ── Lazy model loading ─────────────────────────────────────
+# Models download on first chat request, not at startup
+_models_ready = False
+
+def ensure_models():
+    global _models_ready
+    if not _models_ready:
+        from model_loader import download_models
+        logger.info("First request — downloading models...")
+        download_models()
+        _models_ready = True
+        logger.info("Models ready.")
+
+# ── Rate limiting ──────────────────────────────────────────
 RATE_LIMIT  = 20
 RATE_WINDOW = 60
 _req_log: dict = defaultdict(list)
- 
+
 def check_rate_limit(ip: str):
     now = time.time()
     _req_log[ip] = [t for t in _req_log[ip] if now - t < RATE_WINDOW]
@@ -71,40 +80,46 @@ def check_rate_limit(ip: str):
             detail="Too many requests. Please slow down.",
         )
     _req_log[ip].append(now)
- 
+
+# ── Session store ──────────────────────────────────────────
 _sessions: dict = {}
- 
-def get_bot(session_id: str) -> ResponseGenerator:
+
+def get_bot(session_id: str):
+    from inference.response_generator import ResponseGenerator
     if session_id not in _sessions:
         logger.info(f"New session: {session_id}")
         _sessions[session_id] = ResponseGenerator()
     return _sessions[session_id]
- 
+
+# ── Models ─────────────────────────────────────────────────
 class ChatRequest(BaseModel):
     message:    str
     session_id: str = "default"
- 
+
 class ChatResponse(BaseModel):
     response:           str
     emotion:            str
     secondary_emotions: list[str]
     intent:             str
- 
+
 class ResetRequest(BaseModel):
     session_id: str = "default"
- 
+
+# ── Routes ─────────────────────────────────────────────────
+
 @app.get("/")
 def health_check():
     return {"status": "ok", "message": "Solace chatbot API is running."}
- 
+
 @app.get("/health")
 def detailed_health():
     return {
         "status":          "ok",
+        "models_ready":    _models_ready,
         "active_sessions": len(_sessions),
         "timestamp":       datetime.utcnow().isoformat(),
     }
- 
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, req: Request):
     check_rate_limit(req.client.host)
@@ -112,6 +127,10 @@ async def chat(request: ChatRequest, req: Request):
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
     if len(request.message) > 1000:
         raise HTTPException(status_code=400, detail="Message too long (max 1000 chars).")
+
+    # Download models on first request if not already done
+    ensure_models()
+
     logger.info(f"[{request.session_id}] User: {request.message[:80]}")
     try:
         bot    = get_bot(request.session_id)
@@ -126,7 +145,7 @@ async def chat(request: ChatRequest, req: Request):
     except Exception as e:
         logger.error(f"[{request.session_id}] Error: {e}")
         raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
- 
+
 @app.post("/reset")
 async def reset(request: ResetRequest, req: Request):
     check_rate_limit(req.client.host)
