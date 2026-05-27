@@ -26,9 +26,12 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Solace Mental Health Chatbot API", version="1.0.0")
 
+# ✅ FIXED CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://chat-tau-seven-67.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
