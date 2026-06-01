@@ -8,6 +8,7 @@ import sys
 import time
 import logging
 import asyncio
+import threading
 import requests as http_requests
 from collections import defaultdict
 from datetime import datetime
@@ -55,24 +56,24 @@ async def keep_alive():
         except Exception as e:
             logger.warning(f"Keep-alive ping failed: {e}")
 
+# ── Global bot instance preloaded at startup ────────────────
+_preloaded_bot = None
+
+def _preload_in_background():
+    global _preloaded_bot
+    from model_loader import download_models
+    from inference.response_generator import ResponseGenerator
+    download_models()
+    _preloaded_bot = ResponseGenerator()
+    logger.info("Models preloaded and ready.")
+
 @app.on_event("startup")
 async def startup():
-    # Start keep-alive — do NOT download models here (causes timeout)
     asyncio.create_task(keep_alive())
+    # Load models in background thread — doesn't block startup
+    thread = threading.Thread(target=_preload_in_background, daemon=True)
+    thread.start()
     logger.info("Solace API is ready.")
-
-# ── Lazy model loading ──────────────────────────��──────────
-# Models download on first chat request, not at startup
-_models_ready = False
-
-def ensure_models():
-    global _models_ready
-    if not _models_ready:
-        from model_loader import download_models
-        logger.info("First request — downloading models...")
-        download_models()
-        _models_ready = True
-        logger.info("Models ready.")
 
 # ── Rate limiting ──────────────────────────────────────────
 RATE_LIMIT  = 20
@@ -95,11 +96,14 @@ _sessions: dict = {}
 def get_bot(session_id: str):
     from inference.response_generator import ResponseGenerator
     if session_id not in _sessions:
+        if _preloaded_bot is not None:
+            _sessions[session_id] = _preloaded_bot
+        else:
+            _sessions[session_id] = ResponseGenerator()
         logger.info(f"New session: {session_id}")
-        _sessions[session_id] = ResponseGenerator()
     return _sessions[session_id]
 
-# ── Models ─────────────────────────────────────────────────
+# ── Models ─────────────────────���───────────────────────────
 class ChatRequest(BaseModel):
     message:    str
     session_id: str = "default"
@@ -123,7 +127,7 @@ def health_check():
 def detailed_health():
     return {
         "status":          "ok",
-        "models_ready":    _models_ready,
+        "models_ready":    _preloaded_bot is not None,
         "active_sessions": len(_sessions),
         "timestamp":       datetime.utcnow().isoformat(),
     }
@@ -135,9 +139,6 @@ async def chat(request: ChatRequest, req: Request):
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
     if len(request.message) > 1000:
         raise HTTPException(status_code=400, detail="Message too long (max 1000 chars).")
-
-    # Download models on first request if not already done
-    ensure_models()
 
     logger.info(f"[{request.session_id}] User: {request.message[:80]}")
     try:
