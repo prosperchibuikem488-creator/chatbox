@@ -1,4 +1,9 @@
 import os
+# Set cache dirs first to prevent slow migration
+os.environ["HF_HOME"] = "/tmp/hf_cache"
+os.environ["TRANSFORMERS_CACHE"] = "/tmp/hf_cache"
+os.environ["HF_DATASETS_CACHE"] = "/tmp/hf_cache"
+
 import sys
 import time
 import logging
@@ -56,7 +61,7 @@ async def startup():
     asyncio.create_task(keep_alive())
     logger.info("Solace API is ready.")
 
-# ── Lazy model loading ─────────────────────────────────────
+# ── Lazy model loading ──────────────────────────��──────────
 # Models download on first chat request, not at startup
 _models_ready = False
 
