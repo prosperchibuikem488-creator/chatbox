@@ -32,16 +32,35 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Solace Mental Health Chatbot API", version="1.0.0")
 
-# ✅ FIXED CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "*",
-    ],
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Model preloading ───────────────────────────────────────
+_models_ready   = False
+_models_loading = False
+_preload_error  = None
+
+def _preload_in_background():
+    global _models_ready, _models_loading, _preload_error
+    try:
+        from model_loader import download_models
+        from inference.response_generator import ResponseGenerator
+        download_models()
+        # Warm up by creating one bot instance
+        bot = ResponseGenerator()
+        _sessions["__warmup__"] = bot
+        _models_ready = True
+        logger.info("Models preloaded and ready.")
+    except Exception as e:
+        _preload_error = str(e)
+        logger.error(f"Model preload failed: {e}")
+    finally:
+        _models_loading = False
 
 # ── Keep-alive ping ────────────────────────────────────────
 async def keep_alive():
@@ -56,24 +75,14 @@ async def keep_alive():
         except Exception as e:
             logger.warning(f"Keep-alive ping failed: {e}")
 
-# ── Global bot instance preloaded at startup ────────────────
-_preloaded_bot = None
-
-def _preload_in_background():
-    global _preloaded_bot
-    from model_loader import download_models
-    from inference.response_generator import ResponseGenerator
-    download_models()
-    _preloaded_bot = ResponseGenerator()
-    logger.info("Models preloaded and ready.")
-
 @app.on_event("startup")
 async def startup():
-    asyncio.create_task(keep_alive())
-    # Load models in background thread — doesn't block startup
+    global _models_loading
+    _models_loading = True
     thread = threading.Thread(target=_preload_in_background, daemon=True)
     thread.start()
-    logger.info("Solace API is ready.")
+    asyncio.create_task(keep_alive())
+    logger.info("Solace API is ready. Models loading in background...")
 
 # ── Rate limiting ──────────────────────────────────────────
 RATE_LIMIT  = 20
@@ -96,14 +105,11 @@ _sessions: dict = {}
 def get_bot(session_id: str):
     from inference.response_generator import ResponseGenerator
     if session_id not in _sessions:
-        if _preloaded_bot is not None:
-            _sessions[session_id] = _preloaded_bot
-        else:
-            _sessions[session_id] = ResponseGenerator()
         logger.info(f"New session: {session_id}")
+        _sessions[session_id] = ResponseGenerator()
     return _sessions[session_id]
 
-# ── Models ─────────────────────���───────────────────────────
+# ── Request / Response models ──────────────────────────────
 class ChatRequest(BaseModel):
     message:    str
     session_id: str = "default"
@@ -121,13 +127,19 @@ class ResetRequest(BaseModel):
 
 @app.get("/")
 def health_check():
-    return {"status": "ok", "message": "Solace chatbot API is running."}
+    return {
+        "status":        "ok",
+        "message":       "Solace chatbot API is running.",
+        "models_ready":  _models_ready,
+        "models_loading": _models_loading,
+    }
 
 @app.get("/health")
 def detailed_health():
     return {
         "status":          "ok",
-        "models_ready":    _preloaded_bot is not None,
+        "models_ready":    _models_ready,
+        "models_loading":  _models_loading,
         "active_sessions": len(_sessions),
         "timestamp":       datetime.utcnow().isoformat(),
     }
@@ -135,10 +147,23 @@ def detailed_health():
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, req: Request):
     check_rate_limit(req.client.host)
+
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
     if len(request.message) > 1000:
         raise HTTPException(status_code=400, detail="Message too long (max 1000 chars).")
+
+    # Wait for models to finish loading (max 60 seconds)
+    waited = 0
+    while not _models_ready and waited < 60:
+        if _preload_error:
+            raise HTTPException(status_code=500, detail=f"Model loading failed: {_preload_error}")
+        await asyncio.sleep(2)
+        waited += 2
+        logger.info(f"Waiting for models... ({waited}s)")
+
+    if not _models_ready:
+        raise HTTPException(status_code=503, detail="Models not ready yet. Please try again in a moment.")
 
     logger.info(f"[{request.session_id}] User: {request.message[:80]}")
     try:
